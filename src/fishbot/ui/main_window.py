@@ -849,7 +849,14 @@ class MainWindow(QMainWindow):
                     restored = True
                     break
         if not restored and self.resolution_combo.count() > 0:
-            self.resolution_combo.setCurrentIndex(0)
+            # Default to 1920×1080 if available, otherwise first entry
+            default = (1920, 1080)
+            default_idx = 0
+            for i in range(self.resolution_combo.count()):
+                if self.resolution_combo.itemData(i) == default:
+                    default_idx = i
+                    break
+            self.resolution_combo.setCurrentIndex(default_idx)
 
         # Trigger ROI load for the selected entry
         if self.resolution_combo.count() > 0:

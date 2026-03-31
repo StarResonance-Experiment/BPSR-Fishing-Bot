@@ -13,6 +13,7 @@ a = Analysis(
         ("src/fishbot/assets/templates/1280_720",  "assets/templates/1280_720"),
         ("src/fishbot/assets/templates/1920_1080", "assets/templates/1920_1080"),
         ("src/fishbot/assets/templates/2560_1440", "assets/templates/2560_1440"),
+        ("src/fishbot/assets/templates/3440_1440", "assets/templates/3440_1440"),
     ],
     hiddenimports=[
         # PyQt6
