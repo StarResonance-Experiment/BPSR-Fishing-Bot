@@ -81,15 +81,19 @@ QPushButton#start_btn {
 }
 QPushButton#start_btn:hover  { background-color: #b4efb0; }
 QPushButton#start_btn:disabled {
-    background-color: #313244;
-    color: #45475a;
+    background-color: #45475a;
+    color: #6c7086;
 }
 QPushButton#stop_btn {
     background-color: #f38ba8;
     color: #1e1e2e;
     font-weight: bold;
 }
-QPushButton#stop_btn:hover  { background-color: #f5a0b5; }
+QPushButton#stop_btn:hover     { background-color: #f5a0b5; }
+QPushButton#stop_btn:disabled  {
+    background-color: #45475a;
+    color: #6c7086;
+}
 QTextEdit {
     background-color: #181825;
     border: 1px solid #45475a;
@@ -199,6 +203,7 @@ class _HotkeySignals(QObject):
     start_pressed      = pyqtSignal()
     stop_pressed       = pyqtSignal()
     visualizer_toggled = pyqtSignal()
+    status_toggled     = pyqtSignal()
 
 
 # ── Bot worker thread ────────────────────────────────────────────────────────
@@ -320,9 +325,11 @@ class MainWindow(QMainWindow):
         self._hotkey_signals.start_pressed.connect(self._on_start)
         self._hotkey_signals.stop_pressed.connect(self._on_stop)
         self._hotkey_signals.visualizer_toggled.connect(self._toggle_visualizer)
+        self._hotkey_signals.status_toggled.connect(self._toggle_status_overlay)
         keyboard.add_hotkey("f7", lambda: self._hotkey_signals.start_pressed.emit())
         keyboard.add_hotkey("f8", lambda: self._hotkey_signals.stop_pressed.emit())
         keyboard.add_hotkey("f9", lambda: self._hotkey_signals.visualizer_toggled.emit())
+        keyboard.add_hotkey("f10", lambda: self._hotkey_signals.status_toggled.emit())
 
         # Status bar refresh timer
         self._elapsed_timer = QTimer(self)
@@ -331,6 +338,9 @@ class MainWindow(QMainWindow):
 
         # Restore saved config (if any)
         self._load_config()
+
+        # Auto-open the status overlay on startup
+        QTimer.singleShot(200, self._toggle_status_overlay)
 
     # ── UI construction ──────────────────────────────────────────────────────
     def _build_ui(self):
@@ -357,10 +367,6 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._build_status_group())
         layout.addWidget(self._build_controls_group())
         layout.addWidget(self._build_stats_group())
-
-        self.roi_btn = QPushButton("ROI Visualizer")
-        self.roi_btn.clicked.connect(self._toggle_visualizer)
-        layout.addWidget(self.roi_btn)
 
         layout.addStretch()
         return panel
@@ -403,9 +409,9 @@ class MainWindow(QMainWindow):
         lay.addWidget(self.start_btn)
         lay.addWidget(self.stop_btn)
 
-        hotkey_hint = QLabel("F7: Start  |  F8: Stop  |  F9: ROI Visualizer")
+        hotkey_hint = QLabel("F7: Start  |  F8: Stop\nF9: ROI Visualizer\nF10: Status Overlay")
         hotkey_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        hotkey_hint.setStyleSheet("color: #585b70; font-size: 10px; padding-top: 2px;")
+        hotkey_hint.setStyleSheet("color: #585b70; font-size: 12px; padding-top: 4px;")
         lay.addWidget(hotkey_hint)
         return grp
 
@@ -885,6 +891,8 @@ class MainWindow(QMainWindow):
         self._res_status_lbl.setText(f"Loaded ROIs from {source}")
         self._res_status_lbl.setStyleSheet("color: #a6e3a1; font-size: 11px;")
         self._sync_roi_overlay()
+        if self.roi_overlay and self.roi_overlay.isVisible():
+            self.roi_overlay.update_resolution(self.resolution_combo.currentText())
         self._schedule_save()
 
     # ── Config snapshot ──────────────────────────────────────────────────────
@@ -1008,6 +1016,8 @@ class MainWindow(QMainWindow):
         self.caught_lbl.setText(str(stats.get("fish_caught", 0)))
         self.rod_lbl.setText(   str(stats.get("rod_breaks",  0)))
         self.timeouts_lbl.setText(str(stats.get("timeouts",  0)))
+        if self.roi_overlay and self.roi_overlay.isVisible():
+            self.roi_overlay.update_stats(stats)
 
     def _on_confidence_updated(self, confidences: dict):
         if self.roi_overlay and self.roi_overlay.isVisible():
@@ -1035,18 +1045,42 @@ class MainWindow(QMainWindow):
             )
 
     # ── ROI Visualizer ───────────────────────────────────────────────────────
-    def _toggle_visualizer(self):
-        if self.roi_overlay and self.roi_overlay.isVisible():
-            self.roi_overlay.close()
-            self.roi_overlay = None
-            self.roi_btn.setText("ROI Visualizer")
-        else:
+    def _ensure_overlay(self):
+        """Create and show the overlay if it doesn't exist yet."""
+        if not (self.roi_overlay and self.roi_overlay.isVisible()):
             self.roi_overlay = RoiVisualizer(rois=self._current_rois())
+            self.roi_overlay._show_rois   = False
+            self.roi_overlay._show_status = True
             self.roi_overlay.update_log_lines(list(self._recent_logs))
             is_running = bool(self.bot_thread and self.bot_thread.isRunning())
             self.roi_overlay.update_status("● Running" if is_running else "● Stopped")
+            self.roi_overlay.update_resolution(self.resolution_combo.currentText())
             self.roi_overlay.showFullScreen()
-            self.roi_btn.setText("Close Visualizer")
+
+    def _close_overlay_if_empty(self):
+        """Close the overlay when both ROIs and status are hidden."""
+        if self.roi_overlay and not self.roi_overlay._show_rois and not self.roi_overlay._show_status:
+            self.roi_overlay.close()
+            self.roi_overlay = None
+
+    def _toggle_visualizer(self):
+        """F9 — toggle ROI boxes only."""
+        already_open = bool(self.roi_overlay and self.roi_overlay.isVisible())
+        self._ensure_overlay()
+        if already_open:
+            self.roi_overlay.toggle_rois()
+        else:
+            self.roi_overlay._show_rois = True
+        self._close_overlay_if_empty()
+
+    def _toggle_status_overlay(self):
+        """F10 — toggle top-left status/log panel only."""
+        already_open = bool(self.roi_overlay and self.roi_overlay.isVisible())
+        self._ensure_overlay()
+        if already_open:
+            self.roi_overlay.toggle_status_overlay()
+        # If just opened, _show_status is already True — nothing extra needed
+        self._close_overlay_if_empty()
 
     def _current_rois(self) -> dict:
         """Collect current ROI values from the spinboxes as a plain dict."""
