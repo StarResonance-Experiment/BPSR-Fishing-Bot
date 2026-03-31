@@ -4,162 +4,250 @@
 </p>
 
 <p align="left">
-    <a href="#"><img alt="Build Status" src="https://github.com/your-username/BPSR-Fishing-Bot/actions/workflows/main.yml/badge.svg"></a>
-    <a href="#"><img alt="Project Version" src="https://img.shields.io/badge/version-1.0.0-blue"></a>
     <a href="./LICENSE"><img alt="License" src="https://img.shields.io/badge/license-GPL--3.0-brightgreen"></a>
-    <a href="https://www.python.org"><img alt="Python" src="https://img.shields.io/badge/Python-3.8+-3776AB?logo=python"></a>
+    <a href="https://www.python.org"><img alt="Python" src="https://img.shields.io/badge/Python-3.10+-3776AB?logo=python"></a>
     <a href="https://opencv.org"><img alt="OpenCV" src="https://img.shields.io/badge/OpenCV-4.x-5C3EE8?logo=opencv"></a>
+    <a href="https://www.riverbankcomputing.com/software/pyqt/"><img alt="PyQt6" src="https://img.shields.io/badge/PyQt6-6.x-41CD52?logo=qt"></a>
 </p>
 
 # BPSR Fishing Bot
 
-An automated and open-source fishing bot built in Python. It uses image detection to identify on-screen events and interact with a game's fishing minigame, automating the entire process.
+An automated, open-source fishing bot for Blue Protocol: Star Resonance, built in Python with a PyQt6 GUI. It uses OpenCV template matching to identify on-screen events and automates the entire fishing minigame loop.
 
 ---
 
 ## Table of Contents
 
-*   [Features](#features)
-*   [Quick Start Guide](#quick-start-guide)
-    *   [Prerequisites](#1-prerequisites)
-    *   [Installation](#2-installation)
-    *   [How to Run](#3-how-to-run)
-*   [Known Issues and Solutions](#known-issues-and-solutions)
-*   [Configuration](#configuration)
-*   [For Developers](#for-developers)
-    *   [Architecture](#architecture)
-    *   [Project Structure](#project-structure)
-*   [Future Plans](#future-plans)
+- [Features](#features)
+- [Quick Start](#quick-start)
+  - [Pre-built Executable](#option-a-pre-built-executable-recommended)
+  - [Run from Source](#option-b-run-from-source)
+- [Usage](#usage)
+  - [Hotkeys](#hotkeys)
+  - [Getting Started](#getting-started)
+- [Configuration](#configuration)
+  - [Bot Config Tab](#bot-config-tab)
+  - [Developer Tab](#developer-tab)
+- [Custom Resolutions & Templates](#custom-resolutions--templates)
+- [Building from Source](#building-from-source)
+- [Troubleshooting](#troubleshooting)
+- [Architecture](#architecture)
+- [Project Structure](#project-structure)
 
 ---
 
 ## Features
 
-*   **Fully Automated Fishing:** Casts the line, detects a bite, and starts the minigame.
-*   **Smart Minigame Player:** Autonomously plays the fishing minigame, moving left and right as needed.
-*   **Automatic Rod Swapping:** Detects when the fishing rod breaks and replaces it with a new one, allowing for uninterrupted fishing sessions.
-*   **Hotkey Control:** Easily start, pause, resume, and stop the bot using hotkeys ('7' and '8' keys).
-*   **Flexible Configuration:** Allows for easy adjustment of detection precision, regions of interest (ROI), and wait times through dedicated configuration files.
-*   **Robust Architecture:** Built with a state machine and solid design principles, making the code easy to understand and extend.
+- **Graphical User Interface** — PyQt6-based GUI with tabbed settings, live log output, and a fullscreen ROI overlay.
+- **Fully Automated Fishing Loop** — Casts, detects bites, plays the minigame, collects rewards, and loops.
+- **Smart Minigame Player** — Tracks the exclamation marker and steers left/right accordingly.
+- **Automatic Rod Swapping** — Detects a broken rod and equips a new one without interruption.
+- **Multi-Resolution Support** — Ships with templates for 1280×720, 1920×1080, and 2560×1440. Users can add their own resolution folders.
+- **External Template System** — User-calibrated ROIs and custom screenshots are saved beside the executable and take precedence over bundled defaults.
+- **Hotkey Control** — Start, stop, and toggle the ROI overlay without touching the mouse.
+- **ROI Overlay** — Transparent fullscreen overlay shows all detection regions, live confidence scores, and bot status.
+- **Debug Mode** — Saves annotated screenshots of every detection attempt to the `capture/` folder.
 
 ---
 
-## Quick Start Guide
+## Quick Start
 
-### 1. Prerequisites
+### Option A: Pre-built Executable (recommended)
 
-*   **Python 3.8+**
-*   The game configured to run in full-screen mode at **1920x1080** resolution.
+1. Download the latest `BPSR-Fishing-Bot.exe` from the [Releases](../../releases) page.
+2. Run the exe — Windows will ask for administrator permission (required for global hotkeys).
+3. Jump to [Usage](#usage).
 
-### 2. Installation
+### Option B: Run from Source
 
-1.  Clone this repository:
-    ```bash
-    git clone https://github.com/your-username/BPSR-Fishing-Bot.git
-    cd BPSR-Fishing-Bot
-    ```
+**Requirements:** Python 3.10+
 
-2.  Install the dependencies from `requirements.txt`:
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-### 3. How to Run
-
-1.  Open the game and make sure it is visible on the screen.
-2.  Be at a fishing location. Either stand on an interactable fishing spot or already in the fishing UI.
-2.  Run the bot from the project's root folder:
-    ```bash
-    python main.py
-    ```
-3.  The bot will be ready. Press **7** key to start/pause and **8** key in-game or in the terminal to stop the bot at any time.
+```bash
+git clone https://github.com/your-username/BPSR-Fishing-Bot.git
+cd BPSR-Fishing-Bot
+pip install -r requirements.txt
+python gui.py
+```
 
 ---
 
-## Known Issues and Solutions
+## Usage
 
-This section lists common issues you might encounter and how to solve them.
+### Hotkeys
 
-### The detection of an item (e.g., broken rod, fish bite) stops working
+| Key | Action |
+|-----|--------|
+| **F7** | Start the bot |
+| **F8** | Stop the bot |
+| **F9** | Toggle the ROI overlay |
 
-*   **Symptom:** The bot stops reacting to a specific event that used to work, such as not swapping a broken rod or not detecting a bite.
-*   **Likely Cause:** The game may have received a minor visual update, changing the appearance of the icon or image the bot is looking for.
-*   **Solution:**
-    1.  **Take a new screenshot** of the failed image (e.g., the broken rod icon).
-    2.  **Replace the corresponding template file** in the `src/fishbot/assets/templates/` folder.
-    3.  If the problem persists, try **adjusting the `precision` value** in the `src/fishbot/config/detection_config.py` file. Lowering the value (e.g., from `0.8` to `0.7`) can help compensate for minor visual differences.
+### Getting Started
 
-### Character won't resume fishing after a timeout state
+1. Launch the bot (exe or `python gui.py`).
+2. Open Blue Protocol: Star Resonance and go to a fishing location.
+3. Either **approach a fishing spot** until the interact prompt (`F`) appears, or **open the fishing UI** manually.
+4. Press **F7** to start. The overlay will turn green and show **● Running**.
+5. Press **F8** to stop at any time.
 
-*   **Symptom:** Something unexpected occurred (like fish escaped) and the bot has escaped the fishing UI and won't start again.
-*   **Cause:** When the bot escapes it tries to re-enter the fishing UI by interacting with the fishing spot. Because some spots move the player after interacting with the fishing spot, the bot idly tries to interact when nothing is there. Bot also does not support a search to find the nearest one.
-*   **Solution:** Move your character over to an interactable fishing spot to resume the bot.
+> **Tip:** Make sure the correct screen resolution is selected in the **Bot Config → Monitor Settings** dropdown before starting.
 
 ---
 
 ## Configuration
 
-The bot's behavior can be adjusted through the files located in `src/fishbot/config/`.
+All settings are saved to `config.json` in the same folder as the exe (or project root when running from source). ROIs are saved separately to `templates/{width}_{height}/rois.json`.
 
-#### `screen_config.py`
-Defines the screen capture area.
-*   `monitor_width`, `monitor_height`: The game's screen resolution (default: 1920x1080).
-*   `monitor_x`, `monitor_y`: Coordinates of the top-left corner of the monitor where the game is running. For the primary monitor, keep this as `(0, 0)`.
+### Bot Config Tab
 
-#### `detection_config.py`
-Controls image detection.
-*   `precision`: The minimum confidence (from `0.0` to `1.0`) for a template to be considered a match.
-*   `templates`: Maps event names to their corresponding image files in `src/fishbot/assets/templates/`.
-*   `rois` (Regions of Interest): Defines rectangles `(x, y, width, height)` to limit the search area for each template, increasing performance and accuracy.
+| Group | Setting | Description |
+|-------|---------|-------------|
+| **Options** | Game Window Title | Window title used to locate the game on screen (default: `Blue Protocol: Star Resonance`) |
+| **Performance** | Target FPS | Screen capture rate. `0` = unlimited |
+| **Detection Precision** | Precision | Minimum match confidence (0.0–1.0, default `0.60`) |
+| **Monitor Settings** | Resolution | Select screen resolution; loads matching templates and ROIs |
+| **Delays** | Default Delay | Pause between most actions (seconds) |
+| | Casting Delay | Pause before each cast |
+| | Finish Wait Delay | Pause after collecting rewards |
+| **State Timeouts** | Per-state timeout | How long (seconds) before the bot gives up and resets a state |
 
-#### `bot_config.py`
-General bot settings.
-*   `state_timeouts`: Maximum time the bot can remain in each state before resetting.
-*   `target_fps`: Target frames per second for screen captures (0 for unlimited).
-*   `default_delay`: Default delays between actions.
-*   `casting_delay`: Delay right before casting a bait. 
+### Developer Tab
+
+| Setting | Description |
+|---------|-------------|
+| **Debug Mode** | Saves annotated detection screenshots to `capture/` |
+| **ROI Table** | Edit the detection regions for each template |
+| **Capture Selected** | Take a fresh screenshot of the checked ROI and save it to the external templates folder |
+| **Save ROIs** | Persist the current ROI values to `templates/{w}_{h}/rois.json` |
+| **Load ROIs** | Reload ROIs from file (external first, then bundled) |
+| **Test Detection** | Run a one-shot detection pass and display confidence scores in the overlay |
 
 ---
 
-## For Developers
+## Custom Resolutions & Templates
 
-### Architecture
+The bot discovers resolutions dynamically by scanning for folders named `{width}_{height}` in two locations:
 
-The bot uses a **Finite State Machine (FSM)** to manage its workflow. The logic is divided as follows:
+| Location | Purpose |
+|----------|---------|
+| `templates/` (beside the exe) | **User-writable.** Custom screenshots and calibrated ROIs go here. |
+| Bundled assets (inside exe / `src/fishbot/assets/templates/`) | Shipped defaults. Read-only when running as an exe. |
 
-*   **`main.py`**: The entry point that initializes and runs the bot.
-*   **`src/fishbot/core/state/`**: Contains the state machine logic.
-    *   `state_machine.py`: Manages the current state and transitions.
-    *   `impl/`: Houses the classes for each concrete state (`CheckingRodState`, `PlayingMinigameState`, etc.), where each implements a single responsibility.
-*   **`src/fishbot/core/game/`**: Modules that interact directly with the game.
-    *   `detector.py`: Responsible for screen capture and template detection using `mss` and `OpenCV`.
-    *   `controller.py`: Simulates keyboard and mouse inputs.
-*   **`src/fishbot/utils/`**: Utility modules, such as the logger function.
+**To add a new resolution:**
 
-### Project Structure
+1. Create a folder named `{width}_{height}` (e.g., `3440_1440`) in the `templates/` folder beside the exe.
+2. Copy the template PNGs from an existing resolution folder and replace them with screenshots taken at your resolution.
+3. Create a `rois.json` in that folder with your calibrated ROI values, or use the **Developer** tab to set and save them.
+4. Select your resolution in **Bot Config → Monitor Settings** and press **Refresh**.
+
+---
+
+## Building from Source
+
+Requires [PyInstaller](https://pyinstaller.org/) and [UPX](https://upx.github.io/) (optional, for compression).
+
+```bash
+pip install pyinstaller
+pyinstaller build.spec --clean
+```
+
+The executable is output to `dist/BPSR-Fishing-Bot.exe`. It requests administrator privileges on launch (required for global hotkeys via the `keyboard` library).
+
+---
+
+## Troubleshooting
+
+### Bot not detecting events / wrong area
+
+- Open the **ROI overlay** (F9) while in the fishing UI to visually confirm each region is positioned correctly.
+- Select your actual screen resolution in **Bot Config → Monitor Settings**.
+- Use the **Developer tab** to adjust ROIs, then **Save ROIs**.
+
+### Detection confidence is low / bot misses events
+
+- Lower the **Precision** slider in **Bot Config → Detection Precision** (try `0.55`–`0.65`).
+- Enable **Debug Mode** and check the `capture/` folder for annotated screenshots to see what the bot is actually seeing.
+- Re-capture templates using **Capture Selected** in the Developer tab if the game UI has been updated.
+
+### Hotkeys not working
+
+- The exe must be run as administrator. Windows UAC will prompt on launch.
+- When running from source, run the terminal as administrator.
+
+### Bot exits fishing UI unexpectedly
+
+- This can happen if the fish escapes during the minigame and a state timeout triggers. Move your character back to an interactable fishing spot — the bot will resume automatically once the interact prompt appears.
+
+---
+
+## Architecture
+
+The bot uses a **Finite State Machine (FSM)** with six states:
+
+```
+STARTING → CHECKING_ROD → CASTING_BAIT → WAITING_FOR_BITE → PLAYING_MINIGAME → FINISHING → (loop)
+```
+
+| State | Responsibility |
+|-------|---------------|
+| `StartingState` | Detects whether the fishing UI is already open or waits for the interact prompt |
+| `CheckingRodState` | Checks rod durability; swaps to a new rod if broken |
+| `CastingBaitState` | Casts the fishing line |
+| `WaitingForBiteState` | Polls for the exclamation bite indicator |
+| `PlayingMinigameState` | Steers the minigame marker left/right until success or failure |
+| `FinishingState` | Dismisses reward dialogs and loops back |
+
+Key modules:
+
+- **`src/fishbot/core/game/detector.py`** — Screen capture (`mss`) and template matching (`OpenCV`).
+- **`src/fishbot/core/game/controller.py`** — Keyboard/mouse input simulation (`pyautogui`, `keyboard`).
+- **`src/fishbot/config/`** — All configuration classes and persistence helpers.
+- **`src/fishbot/ui/main_window.py`** — PyQt6 GUI, hotkey bridge, bot thread, ROI overlay.
+- **`src/fishbot/utils/roi_visualizer.py`** — Standalone/embedded transparent overlay widget.
+
+---
+
+## Project Structure
 
 ```
 BPSR-Fishing-Bot/
+├── gui.py                          # Application entry point (GUI)
+├── build.spec                      # PyInstaller build specification
+├── config.json                     # Runtime config (auto-generated)
+├── templates/                      # User-writable external templates
+│   └── {width}_{height}/
+│       ├── *.png                   # Custom template screenshots
+│       └── rois.json               # Calibrated ROI values
 ├── src/
 │   └── fishbot/
-│       ├── assets/         # Images (templates) for detection
-│       ├── config/         # Bot configuration files
+│       ├── assets/
+│       │   ├── app.ico
+│       │   └── templates/
+│       │       ├── 1280_720/       # Bundled templates + rois.json
+│       │       ├── 1920_1080/
+│       │       └── 2560_1440/
+│       ├── config/
+│       │   ├── __init__.py         # AppConfig + get_template_path
+│       │   ├── bot_config.py       # Timing, FPS, debug settings
+│       │   ├── detection_config.py # Templates map, ROIs, precision
+│       │   ├── paths.py            # TEMPLATES_PATH (frozen-aware)
+│       │   ├── screen_config.py    # Monitor dimensions
+│       │   └── user_config.py      # Config persistence helpers
 │       ├── core/
-│       │   ├── game/       # Game interaction modules (Detector, Controller)
-│       │   └── state/      # State Machine Logic
-│       ├── ui/             # (Reserved for a future GUI)
-│       └── utils/          # Utility modules
-├── .gitignore
-├── main.py                 # Application entry point
-├── README.md
-└── requirements.txt
+│       │   ├── fishing_bot.py      # Main bot loop
+│       │   ├── game/
+│       │   │   ├── detector.py     # Screen capture + template matching
+│       │   │   └── controller.py   # Input simulation
+│       │   └── state/
+│       │       ├── state_machine.py
+│       │       └── impl/           # One file per FSM state
+│       ├── ui/
+│       │   └── main_window.py      # PyQt6 GUI
+│       └── utils/
+│           ├── logger.py
+│           └── roi_visualizer.py   # Transparent overlay widget
+├── requirements.txt
+└── README.md
 ```
-
-## Future Plans
-
-*   [ ] Graphical user interface (GUI) for easier configuration.
-*   [x] Hotkey system to start/stop the bot.
-*   [ ] Improve resilience to unexpected in-game events.
 
 ---
 

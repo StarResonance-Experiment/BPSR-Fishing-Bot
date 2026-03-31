@@ -12,7 +12,7 @@ class WaitingForBiteState(BotState):
 
     def handle(self, screen):
 
-        pos = self.detector.find(screen, "exclamation", 1, debug=self.bot.debug_mode)
+        pos = self.detector.find(screen, "exclamation", debug=self.bot.debug_mode)
 
         if pos:
             self.bot.log("[WAITING_FOR_BITE] ❗ Fish hooked!")

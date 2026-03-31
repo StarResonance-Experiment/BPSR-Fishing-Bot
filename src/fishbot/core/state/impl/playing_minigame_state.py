@@ -17,7 +17,7 @@ class PlayingMinigameState(BotState):
         key_to_release = 'd' if direction == 'left' else 'a'
         opposite_direction = 'right' if direction == 'left' else 'left'
 
-        if self.detector.find(screen, arrow_template):
+        if self.detector.find(screen, arrow_template, debug=self.bot.debug_mode):
             if self._current_direction is None:
                 self.bot.log(f"[MINIGAME] ▶️ Moving to the {direction} (Holding '{key_to_press}')")
                 self.controller.key_down(key_to_press)
@@ -30,38 +30,24 @@ class PlayingMinigameState(BotState):
                 self._current_direction = None
                 time.sleep(self.switch_delay)
 
+    def _on_fish_caught(self) -> StateType:
+        self.bot.log("[MINIGAME] 🐟 Fish caught!")
+        self.bot.stats.increment('fish_caught')
+        self.controller.release_all_controls()
+        self._current_direction = None
+
+        if self.config.quick_finish_enabled:
+            self.bot.log("[MINIGAME] ⏩ Quick finishing...")
+            self.controller.press_key('esc')
+            time.sleep(0.5)
+            return StateType.STARTING
+        return StateType.FINISHING
+
     def handle(self, screen):
-        fish_complete = 0
-        failed = 0
-
-        if self.detector.find(screen, "success", 1, debug=False):
-            fish_complete = 1
-            self.bot.log("[MINIGAME] 🐟 Fish caught!")
-            self.bot.stats.increment('fish_caught')
-
-        if fish_complete == 0 and self.detector.find(screen, "failure", 1, debug=False):
-            fish_complete = 1
-            failed = 1
-            self.bot.log("[MINIGAME] 🐟 Fish got away!")
-            self.bot.stats.increment('fish_escaped')            
-            
-        if fish_complete == 1:
-            self.controller.release_all_controls()
-            self._current_direction = None
-
-            if self.config.quick_finish_enabled:
-                self.bot.log("[MINIGAME] ⏩ Quick finishing...")
-                self.controller.press_key('esc')
-                time.sleep(0.5)
-                return StateType.STARTING
-            else:
-                if failed == 0:
-                    return StateType.FINISHING
-                else:
-                    time.sleep(2)
-                    return StateType.CHECKING_ROD
+        # Check before processing arrows
+        if self.detector.find(screen, "success", debug=self.bot.debug_mode):
+            return self._on_fish_caught()
 
         self._handle_arrow('left', screen)
         self._handle_arrow('right', screen)
-
         return StateType.PLAYING_MINIGAME

@@ -3,7 +3,6 @@ class StatsTracker:
         self.stats = {
             'cycles': 0,
             'fish_caught': 0,
-            'fish_escaped': 0,
             'rod_breaks': 0,
             'timeouts': 0
         }

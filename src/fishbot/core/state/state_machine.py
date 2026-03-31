@@ -46,7 +46,7 @@ class StateMachine:
             log("[TIMEOUT] 🚨 Releasing controls and pressing 'ESC' to reset.")
 
             self.bot.controller.release_all_controls()
-            self.bot.controller.press_key('esc')
+            #self.bot.controller.press_key('esc')
             time.sleep(0.5)
 
             self.bot.stats.increment('timeouts')

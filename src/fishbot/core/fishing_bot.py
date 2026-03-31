@@ -17,8 +17,8 @@ from src.fishbot.utils.logger import log
 
 
 class FishingBot:
-    def __init__(self):
-        self.config = Config()
+    def __init__(self, config: Config = None):
+        self.config = config if config is not None else Config()
         self.stats = StatsTracker()
         self.log = log
 

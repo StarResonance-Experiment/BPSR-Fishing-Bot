@@ -10,37 +10,25 @@ class CheckingRodState(BotState):
         self.bot.log("[CHECKING_ROD] Checking rod...")
 
         time.sleep(1)
-
-        found_rod = 0
-
-        if self.detector.find(screen, "flex_rod", 5, debug=True):
-            found_rod = 1
-
-        if found_rod == 0 and self.detector.find(screen, "sturdy_rod", 5, debug=self.bot.debug_mode):
-            found_rod = 1
-
-        if found_rod == 0 and self.detector.find(screen, "reg_rod", 5, debug=self.bot.debug_mode):
-            found_rod = 1
-               
-        if found_rod == 0:
+        if self.detector.find(screen, "broken_rod", debug=self.bot.debug_mode):
             self.bot.log("[CHECKING_ROD] ⚠️  Broken rod! Replacing...")
             self.bot.stats.increment('rod_breaks')
             time.sleep(1)
 
             self.controller.press_key('m')
             time.sleep(1)
+            
+            screen = self.detector.capture_screen()
+            pos = self.detector.find(screen, "new_rod", debug=self.bot.debug_mode)
+            if pos:
+                self.controller.move_to(pos[0], pos[1])
+                time.sleep(0.5)
+                self.controller.move_to(pos[0], pos[1])
+                time.sleep(0.5)
+                self.controller.click('left')
+                time.sleep(1)
 
-            x = 1650 + self.window.monitor_x
-            y = 580 + self.window.monitor_y
-
-            self.controller.move_to(x, y)
-            time.sleep(0.5)
-            self.controller.move_to(x, y)
-            time.sleep(0.5)
-            self.controller.click('left')
-            time.sleep(1)
-
-            self.bot.log("[CHECKING_ROD] ✅ Rod replaced")
+                self.bot.log("[CHECKING_ROD] ✅ Rod replaced")
         else:
             time.sleep(1)
             self.bot.log("[CHECKING_ROD] ✅ Rod OK")
