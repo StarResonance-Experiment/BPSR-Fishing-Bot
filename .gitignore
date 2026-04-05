@@ -41,7 +41,7 @@ Thumbs.db
 # Runtime / user data
 config.json
 capture/
-templates/
+
 
 # Claude Code
 .claude/
