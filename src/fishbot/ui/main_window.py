@@ -1,7 +1,8 @@
 import ctypes
-import ctypes.wintypes
 import json
+import platform
 import re
+import subprocess
 import sys
 import time
 from collections import deque
@@ -813,10 +814,19 @@ class MainWindow(QMainWindow):
 
     # ── Resolution helpers ────────────────────────────────────────────────────
     def _templates_dir(self, width: int, height: int) -> Path:
-        return TEMPLATES_PATH / f"{width}_{height}"
+        subdir = TEMPLATES_PATH / f"{width}_{height}"
+        if subdir.is_dir():
+            return subdir
+        # Fallback: if no resolution subdir exists, use the base templates folder
+        return TEMPLATES_PATH
 
     def _scan_resolutions(self) -> list[tuple[int, int]]:
-        """Scan internal and external template folders for {width}_{height} dirs."""
+        """Scan internal and external template folders for {width}_{height} dirs.
+
+        If templates exist directly in the base folder (no resolution subdirs),
+        use the primary screen resolution as a fallback entry so the combo is
+        never empty.
+        """
         pattern = re.compile(r'^(\d+)_(\d+)$')
         found: set[tuple[int, int]] = set()
         for base in [TEMPLATES_PATH, templates_base_user_dir()]:
@@ -828,6 +838,21 @@ class MainWindow(QMainWindow):
                 m = pattern.match(folder.name)
                 if m:
                     found.add((int(m.group(1)), int(m.group(2))))
+
+        # Fallback: if no resolution subdirs found but templates exist in base dir,
+        # add the primary screen resolution so the user can still operate.
+        if not found:
+            has_templates = TEMPLATES_PATH.exists() and any(
+                f.suffix.lower() == ".png" for f in TEMPLATES_PATH.iterdir() if f.is_file()
+            )
+            if has_templates:
+                screen = QApplication.primaryScreen()
+                if screen:
+                    sz = screen.size()
+                    found.add((sz.width(), sz.height()))
+                else:
+                    found.add((1920, 1080))
+
         return sorted(found, key=lambda r: r[0] * r[1])
 
     def _populate_resolution_combo(self, keep_selection: bool = False):
@@ -870,18 +895,35 @@ class MainWindow(QMainWindow):
         rois_file = writable if writable.exists() else bundled
 
         if not rois_file.exists():
+            # No saved rois.json — use hardcoded 1080p defaults, scaled to current res
+            from src.fishbot.config.detection_config import DetectionConfig
+            base_rois = DetectionConfig().rois
+            base_w, base_h = 1920, 1080
+            scale_x = width / base_w
+            scale_y = height / base_h
+            rois = {}
+            for name, roi in base_rois.items():
+                if roi and len(roi) == 4:
+                    x, y, w, h = roi
+                    rois[name] = (
+                        round(x * scale_x),
+                        round(y * scale_y),
+                        round(w * scale_x),
+                        round(h * scale_y),
+                    )
+                else:
+                    rois[name] = roi
             self._res_status_lbl.setText(
-                f"rois.json not found for {width}×{height}"
+                f"Using scaled default ROIs for {width}×{height} (from 1080p)"
             )
-            self._res_status_lbl.setStyleSheet("color: #f38ba8; font-size: 11px;")
-            return
-
-        try:
-            rois = json.loads(rois_file.read_text(encoding="utf-8"))
-        except Exception as e:
-            self._res_status_lbl.setText(f"Failed to load rois.json: {e}")
-            self._res_status_lbl.setStyleSheet("color: #f38ba8; font-size: 11px;")
-            return
+            self._res_status_lbl.setStyleSheet("color: #f9e2af; font-size: 11px;")
+        else:
+            try:
+                rois = json.loads(rois_file.read_text(encoding="utf-8"))
+            except Exception as e:
+                self._res_status_lbl.setText(f"Failed to load rois.json: {e}")
+                self._res_status_lbl.setStyleSheet("color: #f38ba8; font-size: 11px;")
+                return
 
         # Apply to ROI spinboxes (block saves during load)
         self._loading = True
@@ -942,20 +984,40 @@ class MainWindow(QMainWindow):
 
     def _focus_game_window(self) -> bool:
         """Bring the game window to the foreground. Returns True if found."""
-        FindWindow      = ctypes.windll.user32.FindWindowW
-        ShowWindow      = ctypes.windll.user32.ShowWindow
-        SetForeground   = ctypes.windll.user32.SetForegroundWindow
-        IsIconic        = ctypes.windll.user32.IsIconic  # minimized?
+        if platform.system() == "Windows":
+            try:
+                FindWindow      = ctypes.windll.user32.FindWindowW
+                ShowWindow      = ctypes.windll.user32.ShowWindow
+                SetForeground   = ctypes.windll.user32.SetForegroundWindow
+                IsIconic        = ctypes.windll.user32.IsIconic
 
-        hwnd = FindWindow(None, self._GAME_WINDOW_TITLE)
-        if not hwnd:
+                hwnd = FindWindow(None, self._GAME_WINDOW_TITLE)
+                if not hwnd:
+                    return False
+
+                if IsIconic(hwnd):
+                    ShowWindow(hwnd, 9)   # SW_RESTORE
+
+                SetForeground(hwnd)
+                return True
+            except AttributeError:
+                return False
+        else:
+            # Linux: use wmctrl or xdotool to focus the window
+            title = self._GAME_WINDOW_TITLE
+            for cmd in [
+                ["wmctrl", "-a", title],
+                ["xdotool", "search", "--name", title, "windowactivate"],
+            ]:
+                try:
+                    result = subprocess.run(cmd, capture_output=True, timeout=5)
+                    if result.returncode == 0:
+                        return True
+                except FileNotFoundError:
+                    continue
+                except subprocess.TimeoutExpired:
+                    continue
             return False
-
-        if IsIconic(hwnd):
-            ShowWindow(hwnd, 9)   # SW_RESTORE
-
-        SetForeground(hwnd)
-        return True
 
     # ── Button handlers ──────────────────────────────────────────────────────
     def _on_start(self):
@@ -1052,6 +1114,19 @@ class MainWindow(QMainWindow):
             )
 
     # ── ROI Visualizer ───────────────────────────────────────────────────────
+    def _show_overlay_fullscreen(self):
+        """Show the overlay covering the full screen.
+
+        With X11BypassWindowManagerHint, showFullScreen() doesn't work because
+        the WM isn't managing the window. Instead, manually set geometry to the
+        full screen size and call show().
+        """
+        screen = QApplication.primaryScreen()
+        if screen:
+            self.roi_overlay.setGeometry(screen.geometry())
+        self.roi_overlay.show()
+        self.roi_overlay.raise_()
+
     def _ensure_overlay(self):
         """Create and show the overlay if it doesn't exist yet."""
         if not (self.roi_overlay and self.roi_overlay.isVisible()):
@@ -1062,7 +1137,7 @@ class MainWindow(QMainWindow):
             is_running = bool(self.bot_thread and self.bot_thread.isRunning())
             self.roi_overlay.update_status("● Running" if is_running else "● Stopped")
             self.roi_overlay.update_resolution(self.resolution_combo.currentText())
-            self.roi_overlay.showFullScreen()
+            self._show_overlay_fullscreen()
 
     def _close_overlay_if_empty(self):
         """Close the overlay when both ROIs and status are hidden."""
@@ -1278,7 +1353,7 @@ class MainWindow(QMainWindow):
                 self._set_roi_result(name, confidence, precision)
 
         if overlay_was_visible:
-            self.roi_overlay.show()
+            self._show_overlay_fullscreen()
 
         self._capture_status_lbl.setText(f"Detection tested for {len(rois)} ROI(s)")
         self._capture_status_lbl.setStyleSheet("color: #89b4fa; font-size: 11px;")
@@ -1391,7 +1466,7 @@ class MainWindow(QMainWindow):
             self._append_log(f"[CAPTURE] Failed: {name}")
 
         if overlay_was_visible:
-            self.roi_overlay.show()
+            self._show_overlay_fullscreen()
 
     # ── Helpers ──────────────────────────────────────────────────────────────
     def _set_status(self, text: str, color: str):

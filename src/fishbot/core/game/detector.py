@@ -55,7 +55,24 @@ class Detector:
             self.sct = mss.mss()
             log("[INFO] ✅ MSS initialized in bot thread")
 
-        screenshot = self.sct.grab(self.monitor)
+        try:
+            screenshot = self.sct.grab(self.monitor)
+        except Exception:
+            # Fallback: use MSS's own monitor definition instead of manual region
+            self.sct.close()
+            self.sct = mss.mss()
+            monitors = self.sct.monitors
+            if len(monitors) > 1:
+                hw_mon = monitors[1]  # first physical monitor
+                self.monitor = {
+                    'left': hw_mon['left'] + self.screen_config.monitor_x,
+                    'top': hw_mon['top'] + self.screen_config.monitor_y,
+                    'width': hw_mon['width'],
+                    'height': hw_mon['height'],
+                }
+                log(f"[WARN] Screen grab failed — re-initialized with monitor: {self.monitor}")
+            screenshot = self.sct.grab(self.monitor)
+
         img = np.array(screenshot)
         return cv.cvtColor(img, cv.COLOR_BGRA2BGR)
 

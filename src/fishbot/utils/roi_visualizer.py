@@ -1,7 +1,8 @@
+import platform
 import sys
 import multiprocessing
 from PyQt6.QtWidgets import QApplication, QWidget
-from PyQt6.QtGui import QPainter, QColor, QPen, QFont, QFontMetrics
+from PyQt6.QtGui import QPainter, QColor, QPen, QFont, QFontMetrics, QRegion, QBitmap, QImage
 from PyQt6.QtCore import Qt, QRect
 
 from src.fishbot.config.detection_config import DetectionConfig
@@ -40,9 +41,34 @@ class RoiVisualizer(QWidget):
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
             Qt.WindowType.WindowStaysOnTopHint |
-            Qt.WindowType.WindowTransparentForInput
+            Qt.WindowType.WindowTransparentForInput |
+            Qt.WindowType.X11BypassWindowManagerHint
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground)
+        self.setStyleSheet("background: transparent;")
+
+        # On Linux X11 without a compositor, true translucency is not supported.
+        # We use a window shape mask so unpainted regions are fully transparent
+        # (cut out). The semi-transparent overlay panel itself will appear opaque.
+        self._use_shape_mask = (
+            platform.system() == "Linux"
+            and not self._has_compositor()
+        )
+
+    @staticmethod
+    def _has_compositor() -> bool:
+        """Check if an X11 compositor is active (e.g. KWin, picom)."""
+        import subprocess
+        try:
+            result = subprocess.run(
+                ["xprop", "-root", "_NET_WM_CM_S0"],
+                capture_output=True, text=True, timeout=3,
+            )
+            # If a compositor owns this selection, output contains a window ID
+            return "window id #" in result.stdout.lower()
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            return False
 
     # ── Public API ───────────────────────────────────────────────────────────
     def update_rois(self, rois: dict):
@@ -87,10 +113,8 @@ class RoiVisualizer(QWidget):
         self.update()
 
     # ── Paint ────────────────────────────────────────────────────────────────
-    def paintEvent(self, event):
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
+    def _paint_content(self, painter: QPainter):
+        """Draw all overlay content onto the given painter."""
         if not self._show_rois:
             if self._show_status:
                 self._draw_log_overlay(painter)
@@ -122,6 +146,29 @@ class RoiVisualizer(QWidget):
 
         if self._show_status:
             self._draw_log_overlay(painter)
+
+    def paintEvent(self, event):
+        if self._use_shape_mask:
+            # Render to an offscreen image to build a shape mask
+            img = QImage(self.size(), QImage.Format.Format_ARGB32_Premultiplied)
+            img.fill(Qt.GlobalColor.transparent)
+            off = QPainter(img)
+            off.setRenderHint(QPainter.RenderHint.Antialiasing)
+            self._paint_content(off)
+            off.end()
+
+            # Build mask: any pixel with alpha > 0 is visible
+            mask = img.createAlphaMask()
+            self.setMask(QBitmap.fromImage(mask))
+
+            # Now paint onto the actual widget
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            self._paint_content(painter)
+        else:
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+            self._paint_content(painter)
 
     _HOTKEY_LINES = [
         "F7: Start      F8: Stop",
@@ -293,7 +340,10 @@ def main():
     print("Press the 'Esc' key to close the window.")
     app = QApplication(sys.argv)
     visualizer = RoiVisualizer()
-    visualizer.showFullScreen()
+    screen = app.primaryScreen()
+    if screen:
+        visualizer.setGeometry(screen.geometry())
+    visualizer.show()
     sys.exit(app.exec())
 
 
